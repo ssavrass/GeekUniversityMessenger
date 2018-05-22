@@ -1,0 +1,3 @@
+{
+  "tests/test_jimrequest.py::test_headers": true
+}
