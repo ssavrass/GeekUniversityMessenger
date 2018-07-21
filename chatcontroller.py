@@ -33,3 +33,18 @@ class ChatController(EchoClient):
         # Отправляем данные на сервер
         self._sock.send(bytes_data)
 
+    def read(self):
+
+            # Получаем данные с сервера
+            bytes_data = self._sock.recv(settings.BUFFER_SIZE)
+
+            # bytes_data = zlib.decompress(comp_data)
+
+            # Приводим полученные данные к строковому виду
+            JSON_data = JSONResponse(bytes_data)
+
+            # Выводим полученные данные на экран
+            print(JSON_data._envelope)
+
+
+

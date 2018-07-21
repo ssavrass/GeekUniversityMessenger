@@ -2,7 +2,7 @@
 # Кодировка по умолчанию
 HOST = 'localhost'
 
-PORT = 8000
+PORT = 8012
 
 ENCODING = 'utf-8'
 

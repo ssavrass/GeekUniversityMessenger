@@ -214,7 +214,7 @@ def test_read(mocked_settimeout, mocked_listen, mocked_bind, mocked_connect, moc
 
     srv.read(clt._sock, ['localhost',8000])
 
-    request = list(srv._requests.values())[0]
+    request = srv._requests[0]
 
     assert 'body' in request.body
 

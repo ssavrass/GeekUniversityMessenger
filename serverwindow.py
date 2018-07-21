@@ -8,17 +8,23 @@
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QTimer
+from chat import Chat
+import select
+import threading
+import json
 
 import time
 import sys
 
-class Server(object):
+class ServerWindow(object):
 
     def __init__(self):
         self.app = QtWidgets.QApplication(sys.argv)
         MainWindow = QtWidgets.QMainWindow()
         self.setupUi(MainWindow)
         self.tickertimer = QTimer()
+        self.chat = Chat()
+        self.clientlist = []
         self.tickertimer.timeout.connect(lambda: self.update_server())
         self.delay = 1000 #ms (1s = 1000ms)    
         MainWindow.show()
@@ -82,34 +88,98 @@ class Server(object):
 
     def start_server(self):    
         self.tickertimer.start(self.delay)
-
+        
     def stop_server(self):
         self.tickertimer.stop()
+        self.chat.database.session.close()
 
 
-    def update_server(self):
-        
-        self.print_status()
-        self.clients()
-        self.client_statistics()
+    def update_server(self): 
+
+
+        self.chat.connect(b'secretkey')
+
+        self.chat.perform_mainloop()
        
+        
+        # Извлекаем коллекцию клиентских socket-объектов
+        clients = self.chat._connections
+
+        # Определяем коллекции готовых к записи или чтению клиентских socket-объектов
+        rlist, wlist, xist = select.select(clients, clients, [], 0)
+
+        if not self.chat._connections:
+            print('waiting for clients')
+            self.print_status('waiting for clients')
+        
+        #print(self.chat._connections)
+
+
             
+            # Сохраняем запрос клиента к серверу'
+        for client in self.generator(clients):
+            try:    
+                self.clients(client.getpeername()[0]+':'+str(client.getpeername()[1])) 
+            except (OSError):
+                self.clearclients()
+                self.chat._connections.remove(client)
+                
+                
+        for client in self.generator(rlist):
+         
+            try:
+                thread = threading.Thread(target=self.chat.read, args=(client,), daemon = True)
+                thread.start()
+            except (ConnectionResetError, BrokenPipeError):
 
-
-    def print_status(self):
-        self.listWidget.addItem("yes")
-        print("hello")
-    def clients(self):
-        self.listWidget_2.addItem("yes")
+                self.chat._connections.remove(client)
     
-    def client_statistics(self):
-        self.listWidget_3.addItem("yes")
+
+        if self.chat._requests:
+            request = self.chat._requests.pop()
+            self.print_status(json.dumps(request._envelope))
+            #self.chat.database.add_message(request._envelope['headers']['recieverid'], request._envelope['headers']['senderid'] , request.body, time.ctime())
+            for client in self.generator(wlist):
+            # Извлекаем первый запрос
+                
+              
+                # self.chat.database.add_message(request._envelope['headers']['recieverid'], request._envelope['headers']['senderid'], request._envelope['body'], time.ctime())
+
+                try:
+                    thread = threading.Thread(target=self.chat.write, args=(client, request,), daemon = True)
+                    thread.start()
+                except (ConnectionResetError, BrokenPipeError):
+
+                    self.chat._connections.remove(client)
+
+
+    def generator(self, list):
+        for itm in list:
+            yield itm
+
+
+    def print_status(self, status):
+        self.listWidget_3.addItem(status)
+        # self.listWidget_3.resizeColumnsToContents()
+
+    def clearclients(self):
+        self.listWidget.clear()
+        self.clientlist = []
+        
+    def clients(self, client):
+        if client not in self.clientlist:
+            self.clientlist.append(client)
+            self.listWidget.addItem(client)
+    
+    def client_statistics(self, client_statistics):
+        self.listWidget_2.addItem(client_statistics)
+
         
 
 
 if __name__ == "__main__":
     
     
-    server = Server()
+    server = ServerWindow()
     
 

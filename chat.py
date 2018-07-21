@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 #meta class single tone
 
+import asyncio
+
+import threading
+
 import settings
 
 import socket
@@ -15,9 +19,11 @@ import json
 
 from server import EchoServer
 
-from database.database import SqliteDB
+from database import SqliteDB
 
 from jsonformat.jimprotocolserver import JSONResponse, JSONRequest
+
+from authenticate import server_authenticate
 
 
 class Descriptor():
@@ -42,6 +48,25 @@ class Chat(EchoServer):
         EchoServer.__init__(self)
         self.database = SqliteDB()
         self.desc = Descriptor()
+      
+
+    def connect(self, secret_key):
+
+        try:
+
+            # Получаем подключение клиента
+            client, address = self._sock.accept()
+            if server_authenticate(client, secret_key):
+            # Сохраняем подключение клиента
+                self._connections.append(client)
+            else:
+                client.close()
+                
+
+        except OSError:
+
+            # Обрабатываем timeout сервера
+            pass
                         
     def mainloop(self):
         
@@ -50,60 +75,58 @@ class Chat(EchoServer):
             while True:
 
                 # Обрабатываем подключения к серверу
-                self.connect()
+                self.connect(b'secretkey')
 
                 self.perform_mainloop()
-
-                # Создаем копию словаря подключений для возможности в дальнейшем вносить изменения в оригинал
-                work_copy = self._connections.copy()
                 
-                # Извлекаем коллекцию клиентских socket-объектов
-                clients = work_copy.values()
+                # coro = self.create_server
+
+                # server = self.loop
 
                 # Определяем коллекции готовых к записи или чтению клиентских socket-объектов
-                rlist, wlist, xist = select.select(clients, clients, [], 0)
+                rlist, wlist, xist = select.select(self._connections, self._connections, [], 0)
 
                 print('waiting')
     
-                time.sleep(1)
+                time.sleep(1)                 
 
-                for address, client in work_copy.items():
+           
+
+                # Если клиентский socket-объект готов к чтению, получаем данные от клиента
+                for client in rlist:
                     
-                    # Сохраняем запрос клиента к серверу
-                    
-                        
                     try:
+                        thread = threading.Thread(target=self.read, args=(client,), daemon = True)
+                        thread.start()
+                    except (ConnectionResetError, BrokenPipeError):
 
-                        # Если клиентский socket-объект готов к чтению, получаем данные от клиента
-                        if client in rlist:
-                            
-                            self.read(client, address)
+                        self._connections.remove(client)
+    
 
 
-                        # Если клиентский socket-объект готов к записи, отправляем сообщения на клиент
-                        if client in wlist:
-                            str_address = address[0] + ':' + str(address[1])
-                            if self._requests:
-                                
-                                # Извлекаем первый запрос
-                                request = self._requests[str_address]
+                # Если клиентский socket-объект готов к записи, отправляем сообщения на клиент
 
-                                print(request._envelope)
-                                self.database.add_message(1, 2, request.body, time.ctime())
+                if self._requests:
+                    request = self._requests.pop()
+                    
+                    for client in wlist:
+                    # Извлекаем первый запрос
+                    
+                        print(request._envelope)
+                        self.database.add_message(1, 2, request.body, time.ctime())
 
-                                time.sleep(2)
+                        try:
+                            thread = threading.Thread(target=self.write, args=(client, request,), daemon = True)
+                            thread.start()
+                        except (ConnectionResetError, BrokenPipeError):
 
-                                # Отправляем запрос слиенту
-                                self.write(client, request, address)
+                            self._connections.remove(client)
+                
 
-                                self._requests = dict()
+               
 
                     
-                    except (ConnectionResetError, BrokenPipeError) as err:
-
-                        # В случае разрыва соединения с клиентом и наличии данного клиента в списке подключений
-                        
-                        del self._connections[address]
+                
    
         except KeyboardInterrupt:
             self.database.session.close()

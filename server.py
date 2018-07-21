@@ -16,6 +16,8 @@ import logging
 
 import zlib
 
+from authenticate import server_authenticate
+
 # Быстрая настройка логгирования может быть выполнена так:
 logging.basicConfig(
     filename = "app_01.log",
@@ -38,25 +40,25 @@ class ServerClientTransaction:
             print("Message from client received")
         return False
 
-class ServerVerifier(type):
-    def __new__(cls, clsname, superclasses, attributedict):
-        print("clsname: ", clsname)
-        print("superclasses: ", superclasses)
-        print("attributedict: ", attributedict)
-        if not 'mainloop' in attributedict:
-            raise "No mainloop"
-        return type.__new__(cls, clsname, superclasses, attributedict)           
+# class ServerVerifier(type):
+#     def __new__(cls, clsname, superclasses, attributedict):
+#         print("clsname: ", clsname)
+#         print("superclasses: ", superclasses)
+#         print("attributedict: ", attributedict)
+#         if not 'mainloop' in attributedict:
+#             raise "No mainloop"
+#         return type.__new__(cls, clsname, superclasses, attributedict)           
 
 
-class EchoServer(metaclass=ServerVerifier):
+class EchoServer():
 
     def __init__(self):
 
         # Создаем список для хранения клиентских соединений
-        self._connections = dict()
+        self._connections = list()
 
         # Создаем список для хранения клиентских запросов
-        self._requests = dict()
+        self._requests = list()
 
         # Создаем экземпляр сокет соединения
         self._sock = socket.socket()
@@ -77,9 +79,9 @@ class EchoServer(metaclass=ServerVerifier):
 
             # Получаем подключение клиента
             client, address = self._sock.accept()
-
-            # Сохраняем подключение клиента
-            self._connections.update({address:client})
+            
+            self._connections.append(client)
+        
 
         except OSError:
 
@@ -95,9 +97,7 @@ class EchoServer(metaclass=ServerVerifier):
             if func.__name__ == 'read':
                 self = args[0]
                 client = args[1]
-                address = args[2]
-            
-                str_address = address[0] + ':' + str(address[1])
+        
                 # Получаем данные от клиента
                 data = client.recv(settings.BUFFER_SIZE)
 
@@ -110,7 +110,7 @@ class EchoServer(metaclass=ServerVerifier):
 
 
                     # Сохраняем запрос на сервере
-                    self._requests.update({str_address:JSON_data})
+                    self._requests.append(JSON_data)
                 
                      
 
@@ -119,8 +119,7 @@ class EchoServer(metaclass=ServerVerifier):
                
                 self = args[0]
                 client = args[1]
-                request = args[2] 
-                address = args[3]
+                request = args[2]
                 
                 
                     
@@ -145,12 +144,12 @@ class EchoServer(metaclass=ServerVerifier):
     
 
     @action
-    def read(self, client, address):
+    def read(self, client):
 
         pass
 
     @action
-    def write(self, client, request, address):
+    def write(self, client, request):
 
         pass
 
@@ -169,13 +168,13 @@ class EchoServer(metaclass=ServerVerifier):
                 # Обрабатываем подключения к серверу
                 self.connect()
 
-                self.perform_mainloop()
+                #self.perform_mainloop()
 
                 # Создаем копию словаря подключений для возможности в дальнейшем вносить изменения в оригинал
                 work_copy = self._connections.copy()
                 log.info(self._connections)
                 # Извлекаем коллекцию клиентских socket-объектов
-                clients = work_copy.values()
+                clients = work_copy
 
                 # Определяем коллекции готовых к записи или чтению клиентских socket-объектов
                 rlist, wlist, xist = select.select(clients, clients, [], 0)
@@ -185,7 +184,7 @@ class EchoServer(metaclass=ServerVerifier):
                 time.sleep(2)
     
 
-                for address, client in work_copy.items():
+                for client in work_copy:
                     
                     # Сохраняем запрос клиента к серверу
                     with ServerClientTransaction() as transaction:
@@ -195,32 +194,31 @@ class EchoServer(metaclass=ServerVerifier):
                             # Если клиентский socket-объект готов к чтению, получаем данные от клиента
                             if client in rlist:
                                 log.info("Server log read")
-                                self.read(client, address)
+                                self.read(client)
 
 
                             # Если клиентский socket-объект готов к записи, отправляем сообщения на клиент
                             if client in wlist:
-                                str_address = address[0] + ':' + str(address[1])
+                                
                                 if self._requests:
                                     log.info("Server log write")
                                     # Извлекаем первый запрос
-                                    request = self._requests[str_address]
+                                    request = self._requests.pop()
 
                                     print(request._envelope)
 
                                     time.sleep(2)
 
                                     # Отправляем запрос слиенту
-                                    self.write(client, request, address)
+                                    self.write(client, request)
 
-                                    self._requests = dict()
 
                         
                         except (ConnectionResetError, BrokenPipeError) as err:
 
                             # В случае разрыва соединения с клиентом и наличии данного клиента в списке подключений
                             log.exception('deleted', exc_info=err)
-                            del self._connections[address]
+                            self._connections.remove(client)
        
         except KeyboardInterrupt as err:
 

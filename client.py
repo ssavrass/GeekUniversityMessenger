@@ -7,6 +7,8 @@ import settings
 from jsonformat.jimprotocolclient import JSONResponse, JSONRequest
 
 import zlib
+
+import time
         
 #context manager
 class ServerClientTransaction:
@@ -20,14 +22,14 @@ class ServerClientTransaction:
             print("Transaction transmitted to server")
         return False
 
-class ClientVerifier(type):
-    def __new__(cls, clsname, superclasses, attributedict):
-        print("clsname: ", clsname)
-        print("superclasses: ", superclasses)
-        print("attributedict: ", attributedict)
-        return type.__new__(cls, clsname, superclasses, attributedict)             
+# class ClientVerifier(type):
+#     def __new__(cls, clsname, superclasses, attributedict):
+#         print("clsname: ", clsname)
+#         print("superclasses: ", superclasses)
+#         print("attributedict: ", attributedict)
+#         return type.__new__(cls, clsname, superclasses, attributedict)             
 
-class EchoClient(metaclass=ClientVerifier):
+class EchoClient():
 
     def __init__(self):
 
@@ -54,7 +56,7 @@ class EchoClient(metaclass=ClientVerifier):
 
         # Вводим данные с клавиатуры
         if optional == '':
-            str_data = input('Enter data: ')
+            str_data = input('Enter data: \n')
         else:
             str_data = optional
             print(optional)
@@ -85,14 +87,15 @@ class EchoClient(metaclass=ClientVerifier):
 
             while True:
                 with ServerClientTransaction() as transaction:
-
+                    time.sleep(2)
+                    
                     # Вводим данны и отправляем на сервер
                     self.write()
 
                     # Получаем ответ сервера
                     self.read()
 
-                    self.perform_run()
+                    #self.perform_run()
 
         except KeyboardInterrupt:
 
